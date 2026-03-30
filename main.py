@@ -1,31 +1,36 @@
-import smtplib
-import datetime
-import random
-import pandas
+import requests
+from datetime import datetime, timezone, timedelta
 import os
 
-MY_EMAIL = os.environ.get("MY_EMAIL")
-PASSWORD = os.environ.get("MY_PASSWORD")
+BARK_KEY = os.environ.get("BARK_KEY")
+OWM_APP_ID = os.environ.get("OWM_APP_ID")
 
-def send_birthday_email(name, email_address):
-    letter_to_use = f"letter_{random.randint(1,3)}.txt"
+parameters = {
+    "appid": OWM_APP_ID,
+    "lat": 31.121378,
+    "lon": 121.514857,
+    "cnt": 4
+}
 
-    with open("./letter_templates/" + letter_to_use, "r") as f:
-        wish_text = f.read().replace("[NAME]", name)
+def send_bark():
+    utc_plus_8 = timezone(timedelta(hours=8))
+    now_utc8 = datetime.now(utc_plus_8)
+    date = now_utc8.date().strftime("%Y-%m-%d")
+    content = "今天会下雨"
+    access_url = f"https://api.day.app/{BARK_KEY}/{date}/{content}"
+    requests.get(access_url)
 
-    with smtplib.SMTP("smtp.163.com") as connection:
-        connection.starttls()
-        connection.login(user=MY_EMAIL, password=PASSWORD)
-        connection.sendmail(
-            from_addr=MY_EMAIL,
-            to_addrs=email_address,
-            msg=f"Subject:Happy Birthday!\n\n{wish_text}"
-        )
+response = requests.get("https://api.openweathermap.org/data/2.5/forecast", params=parameters)
+response.raise_for_status()
+weather_data: list = response.json()["list"]
 
-df = pandas.read_csv('birthdays.csv')
-persons = df.to_dict(orient='records')
-now = datetime.datetime.now()
+rainy_day = False
 
-for person in persons:
-    if person['month'] == now.month and person['day'] == now.day:
-        send_birthday_email(person['name'], person['email'])
+for three_hour_weather_data in weather_data: #dict in list
+    if rainy_day:
+        break
+    for three_hour_weather in three_hour_weather_data["weather"]: #dict in list
+        if three_hour_weather["id"] < 700:
+            send_bark()
+            rainy_day = True
+            break
